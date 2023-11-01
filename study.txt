@@ -1,0 +1,304 @@
+JPA 설정
+persistance.xml 파일로 JPA를 설정한다.
+표준 위치가 존재 /META-INF/하위에 추가해야 한다.
+
+설정정보를 읽어서 EntityManagerFactory를 생성 이후 factory에서 EntityManager생성
+
+@Entity
+JPA에서 인식하고 관리하게하는 어노테이션
+
+영속성 컨텍스트
+엔티티를 영구 저장하는 환경?
+em.persist(member) --> DB저장이 아니라 영속성 컨텍스트에 저장한다는 의미
+EntityManager를 생성하면 매핑되는 영속성 컨텍스트가 생성된다.
+
+엔티티 생명주기
+
+=비영속
+jpa persist 전
+
+=영속
+jpa persist 후
+
+=준영속
+em.detach(memeber) 영속성 컨텍스트에서 분리됨 --> 특정개체만
+em.clear() 영속성 콘텍스트 자체를 초기화
+em.close() 용속성콘텍스트 종료
+
+==삭제
+실제 디비에서 삭제
+
+==영속성컨텍스트의 이점
+1차캐시
+@Id로 설정한 값과 객체 자체를 hashMap처럼 저장
+find할떄 1차캐쉬에서 검색
+대신 1차캐시는 trancastion 안에서만 유효
+동일성보장
+
+변경감지
+스냅샷 --> 변경감지 --> 쓰기지연 SQL저장소 --> DB실행
+
+플러시
+em.flush();
+트랜잭션 커밋떄
+jpql 실행시
+
+플러시는 영속성 컨텍스트를 비우지 않음
+영속성 컨텍스트의 변경내용을 데이터베이스 동기화
+
+==기본키 매핑
+@Id --> 키직접할당
+=@GeneratedValue --> 자동할당
+GenerationType.IDENTITY -->디비에서 자동적으로 할당 but Db에 인서트해봐야 어떻게 생성되는지 알수 있음 따라서 persist할때 insert쿼리 DB로 전달
+
+SEQUENCE --> 디비 시퀀스사용  @Entity레벨에서 @SequenceGenerator로 시퀀스설정가능 --> 이것도 persist할때 시퀀스를 DB에서 가져온다
+--> allocationSize=n property는 미리 seq를 n개씩 호출해가지고 온다.
+TABLE -> @TableGenerator 테이블을 pk로사용 sequence로 유사
+
+
+MEMBER와 TEAM 도메인의 연결관계 설정
+@ManyToOne
+@JoinColumn("TEAM_ID")
+
+양방향 관계설정
+@OneToMany(mappedBy = "team")  // 여기서 team은 MEMBER도메인의 변수명
+private List<Member> members = new ArrayList<>();
+
+ mappedBy 이해하기
+ 겍체와 테이블간의 관계를 맺는 차이
+ 1. 객체는 서로 연관되려면 Member -> Team 한개와
+ 2. Team -> Member 한개 이렇게 두개다
+ * 사실상 단방향연관관계가 2개로 이루어져있다고 봐도 무방방
+하지만 테이블에서는 MEMBER테이블에 있는 TEAM_ID외래키 하나로 연관된다.
+
+!!! 만약 멤버의 팀이 바뀐다면 JPA에서는 Member객체의 Team을 변경?
+또는 Team의 List Members의 값을 변경할지
+이것을 결정필요
+연관관계의 주인을 정해야한다. --> 외래키를 관리할수 있다.
+주인이 아닌쪽은 read만 가능
+mappedBy는 주인이 아닌쪽으로 사용
+
+* 외래키가 잇는 곳을 주인으로 정하자 이경우에는 Member객체
+보통 외래키가있는곳이 1:N에서 N쪽이 주인
+
+양방향 매핑시 하는 실수
+1. 연관관계의 주인에 값을 입력하지 않음
+--> 객체입장을 고려하면 Team에도 Member객체를 넣어주어야한다.!!! JPA에서 mappedBy한
+list member값을 쿼리로 사용하지 않지만 객체에서는 사용하기때문인듯
+연관관계 편의 메서도 추가
+ex>
+member객체의 setTeam에서 또는 changeTean이라는 메서드를 추가로 생성성team.addMembers(this); 추가
+*일단 실무에선 단반향 매핑으로 설계를 마쳐야한다.
+*컨트롤러에서 Entity를 반환하지말자 그냥 DTO로 변환해서 반환하자
+
+
+= 1:N 에서 1이 연관관계의 주인이 되는경우 김영한은 추천하지 않음
+ Team객체에 Members정보만 넣어두고 team.getMembers().add(member)식으로 추가한다.
+ --> 이경우에는 Member insert --> team insert --> member update
+ 양방향으로 쓰려면 @JoinColumn(inserable=false,udpatable=false)
+
+= 1:1관계
+외례키는 아무대나 넣어두됨
+DB에서는 외래키에 UNI제약조건이 추가되어야함
+ex Member <--> Locker
+N:1과 유사하지만 @ManyToOne 이아니라 @OneToOne으로 변경하면된다.
+** 1:1관계에서는 대상테이블에 외래키가 있는경우는 지원 하지 않는다.
+ex> Member가 주인이라고 정했는데 외례키가 Locker에 있을경우
+
+=N:M관계
+RDB는 정규화된 테이블 2개로 다대다 관계를 표현 x 연결테이블을 추가해서 다대일 관계로 푼다.
+@JoinTable로 연결테이블 설정
+--> 그냥 중간테이블을 생성하고 1:N 관계로 생성하는는게 좋다.
+중간테이블은 각각의 pk를 fk로가지는 pk복합키로 가지지말고 별도의 의미없는 pk를 하나 가지는게 유연성이 좋다. --> 경함담담
+
+@ManyToOne 속성
+optional
+fetch
+cascade
+targetEntity?
+
+@OneToMany
+mappedBy
+fetch
+cascade
+targetEntity?
+
+
+=고급매핑 (상속관계매핑)
+관계형 데이터베이스는 상속관계가 없다.
+
+
+@Inheritance(strategy= InheritanceType.JOINED)
+1. 아이템 마스터 테이블이 있는경우 (나머지 상속과 유사하게 앨범,책,영화 서브테이블이 있는경우)
+@DiscriminatorColumn(name="") --> 구분컬럼 컬럼이름지정도 가능
+--> 아이템테이블에 즉 부모 테이블(객체에) 타입을 추가 하위 클래스명으로 추가됨 (이름변경시 자식클래스에 @DiscriminatorValue("")로지정
+@Inheritance(strategy= InheritanceType.SINGLE_TABLE)
+JPA기본전략은 싱글테이블로 한테이블에 다떄려 넣는방식
+@DiscriminatorColumn(name="")없어도 자동으로 DTYPE생성해줌
+
+@Inheritance(strategy= InheritanceType.TABLE_PER_CLASS)
+구현 클래스마다 테이블--> 스면안되는 전략이라는데?
+객체지향이기때문에 상위클래스인 Item클래스로 조회가 가능하다.
+--> 그러면 JPA에서는 하위 클래스의 테이블에서 UnionAll로 다 검색해서 뒤져 가져온다.
+** 부모클래스 ITEM은 추상클래스로 생성하는게 맞다
+
+@Mappded Superclass
+객체에서 id랑 name이 계속나올경우 (상속과 관련없이)
+공통매핑정보가 필요할때 사용된다.
+
+해당 필드를 가지고 있는 클래스를 만들고
+@MappedSuperclass로 추가 하고 --> 엔티티가아님 (즉 JPA 조회,검색등이 안된다.) --> 직접사용하지 않으므로 추상클래스로 사용 권장
+다른 Entity에서는 해당 클래스를 상속한다.
+-->해당 상속을 받은 클래스에 해당하는 테이블을 생성할때 상속받은 필드가 같이 생성된다.
+
+=프록시와 연관관계 관리
+멤버조회할떄 팀을 같이 조회해야할까?
+로직상 멤버에서 팀을 조회할 경우가 거의 없다고 했을때 멤버를 조회할때 팀을 같이 조회할 필요가없다
+em.find() vs em.getReference();
+실제 DB값이 필요할때 쿼리를 날려서 가져옴
+em.gerReference() --> proxy가짜 개체를 줌
+실제 가져올 Entity를 상속해서 만들어진 까자 개체
+실제 개체랑 내용이 같다.
+프록시 객체는 실제 객체의 참조(target)를 보관
+
+프록시 객체를 호출하면 프록시 객체는 실제 객체의 메소드 호출( 실체 객체를 호출한적이 없는데?)
+-->호출시 영속성컨텍스트에 객체 초기화 요청하여 실제 Entity를 호출하여 proxy객체의 target에 주소 매핑
+
+1. 프록시 객체는 처음 사용할때 한 번만 초기화
+2. 초기화할때 프록시 객체가 실제 엔티티로 바뀌는게 아님 프록시개체를 통해 실제 객체에 접근이 가능한거
+3. 프록시 객체는 원본 엔티티를 상속받음, !!!!따라서 타입체크시 주의필요( == 비교 실패, 대신 instance of사용)
+4. 영속성 컨텍스트에 찾는 엔티티가 이미있으면 em.getRe...()호출해도 실제 엔티티를 반환함
+ * 다른이유 jpa에서는 한 영속성컨텍스트, 즉 한 트렌잭션안에서는 같은 조회값은? 확인필요* == 보장을 해준다.
+5. getReference 이후 find하면 find한 객체는 이전에 조회한 Proxy객체를 반환한다.
+6. 준영속상태에서 proxy를 초기화하면 문제발생 당근빠따 아닌가...?
+
+프록시 인스턴스 초기화 여부확인ㅇ
+emf.getPersistenceUnitUtil.isLoaded(Object entity)
+프록시 클래스 확인
+entity.getClass().getName
+프록시 강제 초기화
+org.hibernate.hibernate.initialize(entity);
+* 참고로 JPA표준은 강제 초기화 없음 그냥 강제 호출 member.getName();
+
+==지연로딩
+멤버조회할떄 팀을 같이 조회해야할까?
+로직상 멤버에서 팀을 조회할 경우가 거의 없다고 했을때 멤버를 조회할때 팀을 같이 조회할 필요가없다
+@ManyToOne(fetch = fetchType.LAZY)
+Team team
+
+memeber를 find이후 team을 가져와서 클래스조회를 하면 team은 proxy개체이다.
+실제 팀의 어떤 것을 사용할때 조회한다.
+
+*멤버랑 팀을 자주 같이 쓴다면
+fetchType.EAGER로 멤버를 가져올떄 Team도 같이 가져온다.
+
+** 가급적 실무에서 지연로딩사용추천
+1. 즉시로딩을 적용하면 예상하지 못한 SQL이 발생
+2. 즉시 로딩은 JPQL에서 N+1문제를 일으킨다. (MEMEBER를 가져오고 난뒤 확인해보니 Team세팅이 EAGER면 해당 멤버의 team쿼리를 또날린다.)
+3. @ManyToOne, @OneToOne은 기본이 즉시 로딩 --> LAZY로 설정
+4. @OneToMany, @ManyToMany는 기본이 지연로딩
+
+= 영속성 전이 CASCADE
+특정 엔티티를 영속상태로 만들떄 연관된 엔티티도 함게 영속상태로 만들고 싶을때 사용 (ex> 부모 엔티티와 자식엔티티 같이 영속상태 만들기)
+속성중 cascade = CascadeType.All
+all : 모두적용
+persist : 영속?
+remove : 삭제
+
+= 고아객체
+부모 엔티티와 연관관계가 끊어진 자식 엔티티를 자동삭제하는 기능
+orphanRemoval = true;
+ex>
+find부모 = em.find(부모객체)
+find부모.getChildList().remove(0)  --> tx.commit()시 해당 child객체는 delete쿼리가 나감
+
+*영속성 전이, 고아객체삭제는 참조하는 곳이 하나일떄만 사용해야함 즉 특정 엔티티가 개인 소유할때 사용
+OneToOne, OneToMany일때 사용
+
+CascadeType.All + orphanRemoval = true
+두가지를 모두 활성화하면 부모 엔티티를 통해서 자식의 생명주기를 관리할 수 있음
+
+--> 도메인 주도설게 (DDD) 를 할수 있다나 뭐라나
+
+기본값타입
+엔티티타입
+ - 여태까지 공부한 타입들 데이터가 변해도 식별자로 지속해서 추적가능
+값타입
+ int Integer String처럼 단순히 값으로 사용하는 자바 기본타입이나 객체
+ 1> 기본값타입
+  - 자바 기본타입
+  - 래퍼 클래스 (Integer, Long)
+  - String
+ 2> 임베디드타입
+  - 복합 값타입
+  재사용가능
+  높은 응집도?
+  테이블 매핑 방법
+
+@Embeddable
+public class Period {
+
+    private LocalDateTime startDate;
+    private LocalDateTime endDate;
+}
+ --> 처럼 재사용되는 컬럼 클래스로 생성 / 기본생성자는 있어야함
+
+ 사용하는 곳에
+ @Embedded
+ private Period period;
+ 즉 임배디드 타입은 좀더 객체화 스럽게 설계할 수 있다
+ 같은 타입인데 다른 컬럼으로 매핑 시킬때
+ @AttributeOverrides(name = "필드명", column = @Column(name="매핑하려는 컬럼명"), ....)
+ @AttributeOverride --> 한개면
+ > 컬렉션값타임
+
+ =값타입과 불변객체
+  임베디드 타입 같은 값 타입을 여러 엔티티에서 공유하면 위험함
+  ex> member1과 member2 같은 주소 할당시
+  member1.setAddress(adress);
+  member2.setAddress(adress);
+
+  member1.getAdress().setCity("newCity");
+  --> member2의 city도 변경된다 위험!!
+  대신 값을 복사해서 사용해야한다.
+  member2.setAddress(new Adress(복사할값));
+  예방 : 불변객체로 만든다. 값을 수정할수 없게 만든다.
+  생성자로만 값을 설정하고 setter를 생성하지 않으면됨됨
+
+ = 값비교
+  == 과 equals() 를 잘사용해라
+
+ =값타입 컬렉션
+  값타입들을 컬렉션으로 지정 ex> Set이나 List로 --> 즉 다른 테이블로 빼야함
+
+  @ElementCollection
+  @CollectionTable(name="컬렉션 테이블 이름", joinColumns = @JoinColumn(name="MEMBER_ID"))
+  @Column(name="컬럼명")  **임베디드타입의 컬렉션이라면 사용못함 임베디드타입의 설정된 이름으로 테이블생성됨
+  private Set<String> foods = new HashSet<>();
+
+  --> 값타입 컬렉션은 지연로딩 전략 사용
+
+  값타입수정
+
+  제약사항
+  갑타입 컬렉션에 변경사항이 발생하면, 주인 엔티티와 연관된 모든 데이터를 삭제하고, 현재값을 모두 다시 저장한다.
+  값타입 컬렉션 매핑하는 테이블은 모두 컬럼을 묶어서 기본키로 구성해야함 nullX 중복저장 X
+  --> 즉 좋은 방법이 아님..  M:N과 같이 1:N으로 풀어서 ex> 값타입 컬렉션 --> 갑타입을 가지고 있는 엔티티로 생성 그리고 1:N으로 매핑
+  --> 사용할때는 진짜 준내 단순할때?
+
+ JPA쿼리리
+ - JPQL
+SQL문법과 유사 엔티티 객체를 대상으로 쿼리
+-> 동적쿼리 만들기가 어려움
+ - criteria
+ 쿼리를 코드로 짜는 방법? 별로래 복잡하고 실용성이 없다
+
+ -queryDSL
+ 실무사용 권장
+
+ -nativequery
+
+ -jdbcTemplate, springjdbcTemplate, mybatis
+ --> 이것들은 JPA와 연관이 없는 기술이기 때문에 JPA와 사용할떄는
+ JPA를 flush하고 쿼리 실행등을 진행해야한다.
+ **일단 JPQL이 기본되어야 한다.
