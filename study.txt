@@ -159,7 +159,7 @@ em.find() vs em.getReference();
 em.gerReference() --> proxy가짜 개체를 줌
 실제 가져올 Entity를 상속해서 만들어진 까자 개체
 실제 개체랑 내용이 같다.
-프록시 객체는 실제 객체의 참조(target)를 보관
+프록시 객체는 실제 객체의 참조(targdwet)를 보관
 
 프록시 객체를 호출하면 프록시 객체는 실제 객체의 메소드 호출( 실체 객체를 호출한적이 없는데?)
 -->호출시 영속성컨텍스트에 객체 초기화 요청하여 실제 Entity를 호출하여 proxy객체의 target에 주소 매핑
@@ -170,7 +170,7 @@ em.gerReference() --> proxy가짜 개체를 줌
 4. 영속성 컨텍스트에 찾는 엔티티가 이미있으면 em.getRe...()호출해도 실제 엔티티를 반환함
  * 다른이유 jpa에서는 한 영속성컨텍스트, 즉 한 트렌잭션안에서는 같은 조회값은? 확인필요* == 보장을 해준다.
 5. getReference 이후 find하면 find한 객체는 이전에 조회한 Proxy객체를 반환한다.
-6. 준영속상태에서 proxy를 초기화하면 문제발생 당근빠따 아닌가...?
+6. 준영속상태에서 proxy를 초기화하면 문제발생 당근빠따 아닌가...?w
 
 프록시 인스턴스 초기화 여부확인ㅇ
 emf.getPersistenceUnitUtil.isLoaded(Object entity)
@@ -214,13 +214,13 @@ find부모.getChildList().remove(0)  --> tx.commit()시 해당 child객체는 de
 
 *영속성 전이, 고아객체삭제는 참조하는 곳이 하나일떄만 사용해야함 즉 특정 엔티티가 개인 소유할때 사용
 OneToOne, OneToMany일때 사용
-
+w
 CascadeType.All + orphanRemoval = true
 두가지를 모두 활성화하면 부모 엔티티를 통해서 자식의 생명주기를 관리할 수 있음
 
 --> 도메인 주도설게 (DDD) 를 할수 있다나 뭐라나
 
-기본값타입
+기본값타입w
 엔티티타입
  - 여태까지 공부한 타입들 데이터가 변해도 식별자로 지속해서 추적가능
 값타입
@@ -302,3 +302,71 @@ SQL문법과 유사 엔티티 객체를 대상으로 쿼리
  --> 이것들은 JPA와 연관이 없는 기술이기 때문에 JPA와 사용할떄는
  JPA를 flush하고 쿼리 실행등을 진행해야한다.
  **일단 JPQL이 기본되어야 한다.
+
+ =패치조인의 한계
+ 패치조인 대상에는 별칭을 줄 수 없다.
+ --> 하이버네이트는 가능, 가급적 사용x
+ ex> 팀에서 멤버를 패치조인하여 가져오는데 별칭으로 멤버를 where절에서 줄여서 가져온다면 --> JPA가져온 해당팀의 멤버는 모든 멤버가 아닌 일부멤버만 포함되기 때문에
+ ---> ex경우에는...? 거의없다는데 암튼 쓰지말래
+
+ 둘이상의 컬렉션은 패치조인 할 수 없다.
+
+ 컬렉션을 패치조인하면 페이징API(setFirstResult,setMaxResults)를 사용할수 없다.
+ 일대일,다대일 같은 단일 값 연관 필드들은 페치조인해도 페이징가능 (데이터 뻥튀기가 안되니까 가능)
+ 나머진 안돼
+ --> 만약 페이지에서 1개만 가져오도록 했는데 Team조회시 멤버가 2개 이상이면 가져온 데이터의 신뢰가 없다
+
+@BatchSize(숫자)
+IN ( 숫자만큼 ? ) ...
+
+- 여러테이블을 조인해서 엔티티가 가진 모양이 아닌 전혀 다른 결과를 내야한다면, 패치 조인보다 일반조인을 사용하고 필요한 데이터만 조회해서
+DTO로 반환하는 것이 효과적
+
+= 다형성 쿼리
+select i from item i where type(i) IN (Book,Movie)
+--> select i from i where i.DTYPE in ('B','M');
+
+select i from item i
+where treat(i as Book).author = 'kim'
+
+select i.* from item i
+where i.DTYPE = 'B' and i.author = 'kim'
+
+=엔티티 직접 사용
+select count(m.id) from Member m
+select count(m) from Member m
+---> 모두 이렇게 풀림 select count(m.id) as cnt from Member m (엔티티를 직접 사용하면 SQL에서 해당 엔티티에 기본값을 사용)
+
+Named쿼리
+엔티티에 쿼리를 선언해놓는것-정적쿼리
+@Entity
+@NamedQuery(name= "Member.findByUsername", query="select m from Member m where m.username = :usermame")
+public class Member....
+...
+em.createNamedQuery("Member.findByUsername", Member.class).setParameter("username", "회원1").getResultList();
+
+애플리케이션 로딩시점에 초기화 후 사용 --> 성능좋다
+애플리케이션 로딩 시점에 쿼리 검증
+named쿼리는 persistence.xml에 정의해서 사용할 수 있다.
+
+=벌크연산
+재고가 10개미만인 모든상품의 가격을 10%tkdtmdgkfuaus?
+
+JPA변경감지기능으로 실행하려면 너무 많은 SQL실행 필요
+loop로 10개미만 조회
+상품엔티티가격 10%가격증가
+커밋시점에 변경감지 동작
+만약 수정된 객체가 100개라면 100번 update실행
+--> 별루다
+
+-쿼리 한번으로 여러 테이블 로우 변경
+em.createQuery("update Member m set m.age = 20").executeUpdate();
+excuteUpdate()의 결과는 영향받은 엔티티 수 반환
+update, delete지원
+Insert도 지원 하이버네이트지원
+
+별크연산 주의
+벌크연산은 영속성 컨텐스트를 무시하고 데이터베이스에 직접 쿼리 실행됨
+
+1. 벌크 연산을 먼저 실행
+2. 벌크 연산 수행 후 영속성 컨텍스트 초기화
